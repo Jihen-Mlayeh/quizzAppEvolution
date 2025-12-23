@@ -3,8 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../business_logic/blocs/quiz_bloc.dart';
 import '../../business_logic/blocs/quiz_state.dart';
 import '../../business_logic/events/quiz_event.dart';
+import '../../data/repositories/quiz_repository.dart'; // ← AJOUT
 import '../animations/animated_background.dart';
-import 'home_page.dart'; // ← AJOUT : Import nécessaire
+import 'home_page.dart';
 
 class ResultPage extends StatelessWidget {
   const ResultPage({Key? key}) : super(key: key);
@@ -39,106 +40,26 @@ class ResultPage extends StatelessWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: LinearGradient(
-                                colors: [
-                                  Color(0xFFfbbf24),
-                                  Color(0xFFf97316),
-                                ],
-                              ),
-                            ),
-                            child: const Icon(
-                              Icons.emoji_events,
-                              size: 64,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          const Text(
-                            'Quiz Terminé !',
-                            style: TextStyle(
-                              fontSize: 36,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 32),
-                          Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.05),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Column(
-                              children: [
-                                ShaderMask(
-                                  shaderCallback: (bounds) =>
-                                      const LinearGradient(
-                                        colors: [
-                                          Color(0xFFec4899),
-                                          Color(0xFFa855f7),
-                                          Color(0xFF6366f1),
-                                        ],
-                                      ).createShader(bounds),
-                                  child: Text(
-                                    '${state.score}/${state.total}',
-                                    style: const TextStyle(
-                                      fontSize: 64,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Score: ${percentage.toStringAsFixed(0)}%',
-                                  style: TextStyle(
-                                    fontSize: 24,
-                                    color: Colors.white.withOpacity(0.8),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          Text(
-                            percentage >= 80
-                                ? '🎉 Excellent ! Vous maîtrisez parfaitement le sujet !'
-                                : percentage >= 60
-                                ? '👍 Bien joué ! Quelques révisions et ce sera parfait !'
-                                : '💪 Continuez à apprendre, vous progressez !',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: percentage >= 80
-                                  ? Colors.greenAccent
-                                  : percentage >= 60
-                                  ? Colors.yellowAccent
-                                  : Colors.orangeAccent,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
+                          // ... votre code existant pour l'affichage du score
+
                           const SizedBox(height: 32),
 
-                          // ========================================
-                          // ✅ CORRECTION ICI
-                          // ========================================
+                          // ✅ BOUTON RECOMMENCER CORRIGÉ
                           ElevatedButton.icon(
                             onPressed: () {
-                              // Créer un nouveau BLoC avec les questions rechargées
+                              // Récupérer le repository AVANT de naviguer
+                              final repository = context.read<QuizBloc>().repository;
+
                               Navigator.of(context).pushAndRemoveUntil(
                                 MaterialPageRoute(
-                                  builder: (context) => BlocProvider(
-                                    create: (context) => QuizBloc(
-                                      repository: context.read<QuizBloc>().repository,
+                                  builder: (newContext) => BlocProvider(
+                                    create: (newContext) => QuizBloc(
+                                      repository: repository,
                                     )..add(LoadQuizEvent()),
                                     child: const HomePage(),
                                   ),
                                 ),
-                                    (route) => false, // Supprime toutes les routes précédentes
+                                    (route) => false,
                               );
                             },
                             icon: const Icon(Icons.refresh),

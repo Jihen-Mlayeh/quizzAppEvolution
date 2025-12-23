@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+
+import '../models/AnswerModel.dart';
 import '../models/question_model.dart';
 import '../repositories/quiz_repository.dart';
 
@@ -54,14 +56,19 @@ class QuizProvider with ChangeNotifier {
   /// Charge les questions depuis le repository
   Future<void> loadQuestions() async {
     _isLoading = true;
-    notifyListeners(); // Notifie les widgets écouteurs
-
-    // Simule un délai de chargement (comme si on fetch depuis API)
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    _questions = _repository.getQuestions();
-    _isLoading = false;
     notifyListeners();
+
+    try {
+      // ✅ IMPORTANT : await pour attendre les données de Firestore
+      _questions = await _repository.getQuestions();
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      print('❌ Erreur lors du chargement des questions: $e');
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   /// Enregistre la réponse de l'utilisateur
@@ -106,12 +113,15 @@ class QuizProvider with ChangeNotifier {
   }
 
   /// Réinitialise le quiz
-  void resetQuiz() {
+  Future<void> resetQuiz() async {
     _currentQuestionIndex = 0;
     _score = 0;
     _answers = [];
     _showResult = false;
     _isCompleted = false;
+
+    // Recharger les questions
+    await loadQuestions();
     notifyListeners();
   }
 

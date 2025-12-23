@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../../data/models/AnswerModel.dart';
 import '../../data/models/question_model.dart';
 
 abstract class QuizState extends Equatable {
@@ -60,4 +61,13 @@ class QuizCompleted extends QuizState {
 
   @override
   List<Object> get props => [score, total, answers];
+
+}
+class QuizError extends QuizState {
+  final String message;
+
+  const QuizError(this.message);
+
+  @override
+  List<Object> get props => [message];  // ⬅️ Enlevez le ? ici
 }
