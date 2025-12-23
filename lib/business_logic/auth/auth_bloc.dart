@@ -64,16 +64,39 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(AuthLoading());
 
     try {
+      // 1. Créer le compte utilisateur
       final user = await authRepository.signUp(
         email: event.email,
         password: event.password,
         displayName: event.displayName,
       );
 
-      if (user != null) {
-        emit(Authenticated(user));
-      } else {
+      if (user == null) {
         emit(const AuthError('Erreur lors de l\'inscription'));
+        return;
+      }
+
+      // 2. Si une image a été sélectionnée, l'uploader
+      if (event.avatarFile != null) {
+        final avatarUrl = await storageRepository.uploadAvatar(
+          userId: user.id,
+          imageFile: event.avatarFile!,
+        );
+
+        if (avatarUrl != null) {
+          // 3. Mettre à jour l'avatar dans Firestore
+          await authRepository.updateAvatar(user.id, avatarUrl);
+
+          // 4. Récupérer les données mises à jour
+          final updatedUser = user.copyWith(avatarUrl: avatarUrl);
+          emit(Authenticated(updatedUser));
+        } else {
+          // L'upload a échoué, mais le compte est créé
+          emit(Authenticated(user));
+        }
+      } else {
+        // Pas d'avatar sélectionné
+        emit(Authenticated(user));
       }
     } catch (e) {
       emit(AuthError(e.toString()));
