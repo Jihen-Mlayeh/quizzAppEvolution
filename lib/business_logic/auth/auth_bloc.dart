@@ -1,5 +1,4 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/storage_repository.dart';
 import 'auth_event.dart';
@@ -13,14 +12,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     required this.authRepository,
     required this.storageRepository,
   }) : super(AuthInitial()) {
-    // Écouter les changements d'état d'authentification
-    authRepository.authStateChanges.listen((firebase_auth.User? firebaseUser) {
-      if (firebaseUser != null) {
-        add(AuthCheckRequested());
-      } else {
-        emit(Unauthenticated());
-      }
-    });
+    // ❌ SUPPRIMÉ - Cause des boucles infinies
+    // authRepository.authStateChanges.listen((firebaseUser) {
+    //   if (firebaseUser != null) {
+    //     add(AuthCheckRequested());
+    //   } else {
+    //     emit(Unauthenticated());
+    //   }
+    // });
 
     on<AuthCheckRequested>(_onAuthCheckRequested);
     on<SignUpRequested>(_onSignUpRequested);
@@ -36,6 +35,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       AuthCheckRequested event,
       Emitter<AuthState> emit,
       ) async {
+    emit(AuthLoading());
+
     final currentUser = authRepository.currentUser;
 
     if (currentUser == null) {
@@ -52,6 +53,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         emit(Unauthenticated());
       }
     } catch (e) {
+      print('❌ Erreur auth check: $e');
       emit(Unauthenticated());
     }
   }
@@ -99,6 +101,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         emit(Authenticated(user));
       }
     } catch (e) {
+      print('❌ Erreur inscription: $e');
       emit(AuthError(e.toString()));
     }
   }
@@ -122,6 +125,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         emit(const AuthError('Erreur lors de la connexion'));
       }
     } catch (e) {
+      print('❌ Erreur connexion: $e');
       emit(AuthError(e.toString()));
     }
   }
@@ -135,6 +139,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await authRepository.signOut();
       emit(Unauthenticated());
     } catch (e) {
+      print('❌ Erreur déconnexion: $e');
       emit(AuthError(e.toString()));
     }
   }
@@ -171,6 +176,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(AvatarUpdated(updatedUser));
       emit(Authenticated(updatedUser));
     } catch (e) {
+      print('❌ Erreur update avatar: $e');
       emit(AuthError(e.toString()));
       emit(Authenticated(currentUser));
     }
@@ -215,6 +221,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(PasswordResetSent(event.email));
       emit(Unauthenticated());
     } catch (e) {
+      print('❌ Erreur reset password: $e');
       emit(AuthError(e.toString()));
       emit(Unauthenticated());
     }
