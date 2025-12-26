@@ -3,11 +3,20 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../business_logic/blocs/quiz_bloc.dart';
 import '../../business_logic/blocs/quiz_state.dart';
 import '../../business_logic/events/quiz_event.dart';
+import '../../business_logic/auth/auth_bloc.dart';
+import '../../business_logic/auth/auth_event.dart';
 import '../animations/animated_background.dart';
 import 'home_page.dart';
 
-class ResultPageComplete extends StatelessWidget {
+class ResultPageComplete extends StatefulWidget {
   const ResultPageComplete({Key? key}) : super(key: key);
+
+  @override
+  State<ResultPageComplete> createState() => _ResultPageCompleteState();
+}
+
+class _ResultPageCompleteState extends State<ResultPageComplete> {
+  bool _statsUpdated = false;
 
   @override
   Widget build(BuildContext context) {
@@ -22,15 +31,31 @@ class ResultPageComplete extends StatelessWidget {
                   return const Center(child: CircularProgressIndicator());
                 }
 
+                // ✅ MISE À JOUR DES STATISTIQUES
+                if (!_statsUpdated) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      print('📊 Mise à jour des statistiques: ${state.score}/${state.total}');
+                      context.read<AuthBloc>().add(
+                        UpdateQuizStatsRequested(
+                          score: state.score,
+                          total: state.total,
+                        ),
+                      );
+                      setState(() {
+                        _statsUpdated = true;
+                      });
+                    }
+                  });
+                }
+
                 final percentage = (state.score / state.total) * 100;
 
                 return SingleChildScrollView(
                   padding: const EdgeInsets.all(24),
                   child: Column(
                     children: [
-                      // ========================================
                       // CARTE DE SCORE PRINCIPAL
-                      // ========================================
                       Container(
                         padding: const EdgeInsets.all(32),
                         decoration: BoxDecoration(
@@ -130,9 +155,7 @@ class ResultPageComplete extends StatelessWidget {
 
                       const SizedBox(height: 32),
 
-                      // ========================================
                       // DÉTAILS DES RÉPONSES
-                      // ========================================
                       const Text(
                         'Détails des réponses',
                         style: TextStyle(
@@ -147,14 +170,6 @@ class ResultPageComplete extends StatelessWidget {
                       ...state.answers.asMap().entries.map((entry) {
                         final index = entry.key;
                         final answer = entry.value;
-
-                        // Trouver la question correspondante
-                        final question = state.answers.length == state.total
-                            ? context.read<QuizBloc>().state is QuizCompleted
-                            ? (context.read<QuizBloc>().state as QuizCompleted)
-                            .answers[index]
-                            : null
-                            : null;
 
                         return Container(
                           margin: const EdgeInsets.only(bottom: 12),
@@ -177,9 +192,7 @@ class ResultPageComplete extends StatelessWidget {
                                 answer.isCorrect
                                     ? Icons.check_circle
                                     : Icons.cancel,
-                                color: answer.isCorrect
-                                    ? Colors.green
-                                    : Colors.red,
+                                color: answer.isCorrect ? Colors.green : Colors.red,
                                 size: 32,
                               ),
                               const SizedBox(width: 16),
@@ -235,9 +248,7 @@ class ResultPageComplete extends StatelessWidget {
 
                       const SizedBox(height: 32),
 
-                      // ========================================
                       // BOUTON RECOMMENCER
-                      // ========================================
                       ElevatedButton.icon(
                         onPressed: () {
                           final repository = context.read<QuizBloc>().repository;

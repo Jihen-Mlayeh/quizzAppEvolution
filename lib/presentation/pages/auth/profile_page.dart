@@ -1,12 +1,14 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../business_logic/auth/auth_bloc.dart';
 import '../../../business_logic/auth/auth_event.dart';
 import '../../../business_logic/auth/auth_state.dart';
-import '../../../data/repositories/storage_repository.dart';
 import '../../animations/animated_background.dart';
 import '../../themes/app_theme.dart';
 import 'login_page.dart';
@@ -15,7 +17,7 @@ class ProfilePage extends StatelessWidget {
   const ProfilePage({Key? key}) : super(key: key);
 
   Future<void> _showAvatarOptions(BuildContext context) async {
-    final storageRepository = StorageRepository();
+    final picker = ImagePicker();
 
     showModalBottomSheet(
       context: context,
@@ -38,17 +40,15 @@ class ProfilePage extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             ListTile(
-              leading: const Icon(Icons.photo_library, color: Color(0xFFa855f7)),
+              leading:
+              const Icon(Icons.photo_library, color: Color(0xFFa855f7)),
               title: const Text(
                 'Galerie',
                 style: TextStyle(color: Colors.white),
               ),
               onTap: () async {
                 Navigator.pop(context);
-                final imageFile = await storageRepository.pickImageFromGallery();
-                if (imageFile != null && context.mounted) {
-                  context.read<AuthBloc>().add(UpdateAvatarRequested(imageFile));
-                }
+                await _pickAndUpdateAvatar(context, ImageSource.gallery, picker);
               },
             ),
             ListTile(
@@ -59,16 +59,62 @@ class ProfilePage extends StatelessWidget {
               ),
               onTap: () async {
                 Navigator.pop(context);
-                final imageFile = await storageRepository.takePhoto();
-                if (imageFile != null && context.mounted) {
-                  context.read<AuthBloc>().add(UpdateAvatarRequested(imageFile));
-                }
+                await _pickAndUpdateAvatar(context, ImageSource.camera, picker);
               },
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _pickAndUpdateAvatar(
+      BuildContext context,
+      ImageSource source,
+      ImagePicker picker,
+      ) async {
+    try {
+      final XFile? pickedFile = await picker.pickImage(
+        source: source,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
+
+      if (pickedFile != null && context.mounted) {
+        print('✅ Image sélectionnée: ${pickedFile.path}');
+
+        if (kIsWeb) {
+          // Sur Web, lire les bytes
+          final bytes = await pickedFile.readAsBytes();
+          print('✅ Bytes chargés (Web): ${bytes.length} bytes');
+          context.read<AuthBloc>().add(
+            UpdateAvatarRequested(
+              imageBytes: bytes,
+            ),
+          );
+        } else {
+          // Sur Mobile, utiliser File
+          final imageFile = File(pickedFile.path);
+          print('✅ File créé (Mobile): ${pickedFile.path}');
+          context.read<AuthBloc>().add(
+            UpdateAvatarRequested(
+              imageFile: imageFile,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ Erreur sélection/upload image: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _handleLogout(BuildContext context) {
@@ -91,9 +137,8 @@ class ProfilePage extends StatelessWidget {
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(dialogContext); // Ferme le dialog
+              Navigator.pop(dialogContext);
               context.read<AuthBloc>().add(SignOutRequested());
-              // Navigation gérée par le BlocListener
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
@@ -115,7 +160,6 @@ class ProfilePage extends StatelessWidget {
             child: BlocListener<AuthBloc, AuthState>(
               listener: (context, state) {
                 if (state is Unauthenticated) {
-                  // Navigation vers LoginPage après déconnexion
                   Navigator.of(context).pushAndRemoveUntil(
                     MaterialPageRoute(builder: (_) => const LoginPage()),
                         (route) => false,
@@ -145,7 +189,8 @@ class ProfilePage extends StatelessWidget {
                   final user = state is Authenticated
                       ? state.user
                       : state is AvatarUpdating
-                      ? (context.read<AuthBloc>().state as Authenticated).user
+                      ? (context.read<AuthBloc>().state as Authenticated)
+                      .user
                       : null;
 
                   if (user == null) {
@@ -163,7 +208,8 @@ class ProfilePage extends StatelessWidget {
                           children: [
                             IconButton(
                               onPressed: () => Navigator.pop(context),
-                              icon: const Icon(Icons.arrow_back, color: Colors.white),
+                              icon: const Icon(Icons.arrow_back,
+                                  color: Colors.white),
                             ),
                             const Spacer(),
                             IconButton(
@@ -183,7 +229,8 @@ class ProfilePage extends StatelessWidget {
                                 gradient: AppTheme.primaryGradient,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFFa855f7).withOpacity(0.5),
+                                    color: const Color(0xFFa855f7)
+                                        .withOpacity(0.5),
                                     blurRadius: 30,
                                     offset: const Offset(0, 10),
                                   ),
@@ -194,7 +241,8 @@ class ProfilePage extends StatelessWidget {
                                 radius: 70,
                                 backgroundColor: const Color(0xFF2d1b4e),
                                 backgroundImage: user.avatarUrl != null
-                                    ? CachedNetworkImageProvider(user.avatarUrl!)
+                                    ? CachedNetworkImageProvider(
+                                    user.avatarUrl!)
                                     : null,
                                 child: user.avatarUrl == null
                                     ? Text(
@@ -226,7 +274,9 @@ class ProfilePage extends StatelessWidget {
                               bottom: 0,
                               right: 0,
                               child: GestureDetector(
-                                onTap: () => _showAvatarOptions(context),
+                                onTap: isUpdating
+                                    ? null
+                                    : () => _showAvatarOptions(context),
                                 child: Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
@@ -292,7 +342,8 @@ class ProfilePage extends StatelessWidget {
                               ),
                               const SizedBox(height: 24),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                mainAxisAlignment:
+                                MainAxisAlignment.spaceAround,
                                 children: [
                                   _StatCard(
                                     icon: Icons.quiz,
@@ -307,7 +358,8 @@ class ProfilePage extends StatelessWidget {
                                   _StatCard(
                                     icon: Icons.emoji_events,
                                     value: user.totalQuizzes > 0
-                                        ? ((user.totalScore / user.totalQuizzes)
+                                        ? ((user.totalScore /
+                                        user.totalQuizzes)
                                         .toStringAsFixed(1))
                                         : '0',
                                     label: 'Moyenne',
@@ -366,7 +418,8 @@ class ProfilePage extends StatelessWidget {
                             onPressed: () {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Fonctionnalité bientôt disponible'),
+                                  content:
+                                  Text('Fonctionnalité bientôt disponible'),
                                   backgroundColor: Colors.orange,
                                 ),
                               );

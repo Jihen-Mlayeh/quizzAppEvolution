@@ -3,12 +3,15 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../business_logic/blocs/quiz_bloc.dart';
 import '../../business_logic/blocs/quiz_state.dart';
 import '../../business_logic/events/quiz_event.dart';
+import '../../business_logic/auth/auth_bloc.dart';
+import '../../business_logic/auth/auth_state.dart';
 import '../widgets/question_card.dart';
 import '../widgets/progress_bar.dart';
 import '../animations/animated_background.dart';
 
 import 'admin/add_home_page.dart';
-import 'result_page_complete.dart'; // ← CHANGEMENT ICI
+import 'result_page_complete.dart';
+import 'auth/profile_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({Key? key}) : super(key: key);
@@ -27,7 +30,7 @@ class HomePage extends StatelessWidget {
                     MaterialPageRoute(
                       builder: (_) => BlocProvider.value(
                         value: context.read<QuizBloc>(),
-                        child: const ResultPageComplete(), // ← CHANGEMENT ICI
+                        child: const ResultPageComplete(),
                       ),
                     ),
                   );
@@ -73,7 +76,6 @@ class HomePage extends StatelessWidget {
                                   ),
                                 ),
                               ).then((_) {
-                                // Recharger les questions après être revenu de l'admin
                                 context.read<QuizBloc>().add(LoadQuizEvent());
                               });
                             },
@@ -105,30 +107,113 @@ class HomePage extends StatelessWidget {
                         padding: const EdgeInsets.all(16),
                         child: Column(
                           children: [
-                            ShaderMask(
-                              shaderCallback: (bounds) => const LinearGradient(
-                                colors: [
-                                  Color(0xFFec4899),
-                                  Color(0xFFa855f7),
-                                  Color(0xFF6366f1),
-                                ],
-                              ).createShader(bounds),
-                              child: const Text(
-                                'Quiz France',
-                                style: TextStyle(
-                                  fontSize: 36,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                            // Header avec titre et avatar
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      ShaderMask(
+                                        shaderCallback: (bounds) =>
+                                            const LinearGradient(
+                                              colors: [
+                                                Color(0xFFec4899),
+                                                Color(0xFFa855f7),
+                                                Color(0xFF6366f1),
+                                              ],
+                                            ).createShader(bounds),
+                                        child: const Text(
+                                          'Quiz France',
+                                          style: TextStyle(
+                                            fontSize: 36,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Testez vos connaissances sur la France',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.white.withOpacity(0.8),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Testez vos connaissances sur la France',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.white.withOpacity(0.8),
-                              ),
+                                // Avatar cliquable
+                                BlocBuilder<AuthBloc, AuthState>(
+                                  builder: (context, authState) {
+                                    if (authState is! Authenticated) {
+                                      return const SizedBox.shrink();
+                                    }
+
+                                    final user = authState.user;
+
+                                    return GestureDetector(
+                                      onTap: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => const ProfilePage(),
+                                          ),
+                                        );
+                                      },
+                                      child: Container(
+                                        width: 50,
+                                        height: 50,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          gradient: const LinearGradient(
+                                            colors: [
+                                              Color(0xFFec4899),
+                                              Color(0xFFa855f7),
+                                              Color(0xFF6366f1),
+                                            ],
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: const Color(0xFFa855f7)
+                                                  .withOpacity(0.3),
+                                              blurRadius: 10,
+                                              offset: const Offset(0, 3),
+                                            ),
+                                          ],
+                                        ),
+                                        padding: const EdgeInsets.all(2),
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: const Color(0xFF2d1b4e),
+                                            image: user.avatarUrl != null
+                                                ? DecorationImage(
+                                              image: NetworkImage(
+                                                  user.avatarUrl!),
+                                              fit: BoxFit.cover,
+                                            )
+                                                : null,
+                                          ),
+                                          child: user.avatarUrl == null
+                                              ? Center(
+                                            child: Text(
+                                              user.displayName[0]
+                                                  .toUpperCase(),
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          )
+                                              : null,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 16),
                             Row(
@@ -164,16 +249,13 @@ class HomePage extends StatelessWidget {
                             child: QuestionCard(
                               question: currentQuestion,
                               onAnswer: (answer) async {
-                                // Envoyer la réponse
                                 context
                                     .read<QuizBloc>()
                                     .add(AnswerQuestionEvent(answer));
 
-                                // Attendre 1.5 secondes pour que l'utilisateur voie le résultat
                                 await Future.delayed(
                                     const Duration(milliseconds: 1500));
 
-                                // Passer à la question suivante
                                 if (context.mounted) {
                                   context
                                       .read<QuizBloc>()

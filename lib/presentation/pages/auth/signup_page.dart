@@ -8,7 +8,6 @@ import 'package:image_picker/image_picker.dart';
 import '../../../business_logic/auth/auth_bloc.dart';
 import '../../../business_logic/auth/auth_event.dart';
 import '../../../business_logic/auth/auth_state.dart';
-import '../../../data/repositories/storage_repository.dart';
 import '../../animations/animated_background.dart';
 import '../../themes/app_theme.dart';
 import '../home_page.dart';
@@ -29,7 +28,7 @@ class _SignUpPageState extends State<SignUpPage> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   File? _selectedImage;
-  Uint8List? _webImageBytes; // Pour Flutter Web
+  Uint8List? _webImageBytes;
   final ImagePicker _picker = ImagePicker();
 
   @override
@@ -73,17 +72,18 @@ class _SignUpPageState extends State<SignUpPage> {
                 await _pickImage(ImageSource.gallery);
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.camera_alt, color: Color(0xFFa855f7)),
-              title: const Text(
-                'Caméra',
-                style: TextStyle(color: Colors.white),
+            if (!kIsWeb) // La caméra ne fonctionne pas bien sur Web
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: Color(0xFFa855f7)),
+                title: const Text(
+                  'Caméra',
+                  style: TextStyle(color: Colors.white),
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _pickImage(ImageSource.camera);
+                },
               ),
-              onTap: () async {
-                Navigator.pop(context);
-                await _pickImage(ImageSource.camera);
-              },
-            ),
           ],
         ),
       ),
@@ -103,18 +103,18 @@ class _SignUpPageState extends State<SignUpPage> {
         print('✅ Image sélectionnée: ${pickedFile.path}');
 
         if (kIsWeb) {
-          // Sur Web, lire les bytes directement depuis XFile
           final bytes = await pickedFile.readAsBytes();
           setState(() {
             _webImageBytes = bytes;
-            _selectedImage = File(pickedFile.path); // Pour référence
+            _selectedImage = null;
           });
-          print('✅ Bytes chargés: ${bytes.length} bytes');
+          print('✅ Bytes chargés (Web): ${bytes.length} bytes');
         } else {
-          // Sur Mobile, créer un File
           setState(() {
             _selectedImage = File(pickedFile.path);
+            _webImageBytes = null;
           });
+          print('✅ File créé (Mobile): ${pickedFile.path}');
         }
       }
     } catch (e) {
@@ -122,7 +122,7 @@ class _SignUpPageState extends State<SignUpPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur lors de la sélection de l\'image: $e'),
+            content: Text('Erreur: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -132,12 +132,26 @@ class _SignUpPageState extends State<SignUpPage> {
 
   void _handleSignUp() {
     if (_formKey.currentState!.validate()) {
+      print('🚀 Inscription lancée');
+
+      // Afficher un message si une image est sélectionnée
+      if (_selectedImage != null || _webImageBytes != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('📸 L\'avatar sera ajouté après création du compte'),
+            duration: Duration(seconds: 2),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+
       context.read<AuthBloc>().add(
         SignUpRequested(
           email: _emailController.text.trim(),
           password: _passwordController.text,
           displayName: _nameController.text.trim(),
           avatarFile: _selectedImage,
+          avatarBytes: _webImageBytes,
         ),
       );
     }
@@ -152,47 +166,35 @@ class _SignUpPageState extends State<SignUpPage> {
       );
     }
 
-    // Flutter Web
     if (kIsWeb && _webImageBytes != null) {
-      return Image.memory(
-        _webImageBytes!,
-        fit: BoxFit.cover,
-        width: 120,
-        height: 120,
-        errorBuilder: (context, error, stackTrace) {
-          print('❌ Erreur affichage image: $error');
-          return const Icon(
-            Icons.person,
-            size: 60,
-            color: Colors.white54,
-          );
-        },
+      return ClipOval(
+        child: Image.memory(
+          _webImageBytes!,
+          fit: BoxFit.cover,
+          width: 120,
+          height: 120,
+          errorBuilder: (context, error, stackTrace) {
+            return const Icon(Icons.person, size: 60, color: Colors.white54);
+          },
+        ),
       );
     }
 
-    // Mobile (Android/iOS)
     if (_selectedImage != null) {
-      return Image.file(
-        _selectedImage!,
-        fit: BoxFit.cover,
-        width: 120,
-        height: 120,
-        errorBuilder: (context, error, stackTrace) {
-          print('❌ Erreur affichage image: $error');
-          return const Icon(
-            Icons.person,
-            size: 60,
-            color: Colors.white54,
-          );
-        },
+      return ClipOval(
+        child: Image.file(
+          _selectedImage!,
+          fit: BoxFit.cover,
+          width: 120,
+          height: 120,
+          errorBuilder: (context, error, stackTrace) {
+            return const Icon(Icons.person, size: 60, color: Colors.white54);
+          },
+        ),
       );
     }
 
-    return const Icon(
-      Icons.person,
-      size: 60,
-      color: Colors.white54,
-    );
+    return const Icon(Icons.person, size: 60, color: Colors.white54);
   }
 
   @override
@@ -205,14 +207,28 @@ class _SignUpPageState extends State<SignUpPage> {
             child: BlocConsumer<AuthBloc, AuthState>(
               listener: (context, state) {
                 if (state is Authenticated) {
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => const HomePage()),
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('✅ Compte créé avec succès !'),
+                      backgroundColor: Colors.green,
+                      duration: Duration(seconds: 2),
+                    ),
                   );
+
+                  // Navigation après un court délai
+                  Future.delayed(const Duration(milliseconds: 500), () {
+                    if (mounted) {
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(builder: (_) => const HomePage()),
+                      );
+                    }
+                  });
                 } else if (state is AuthError) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(state.message),
+                      content: Text('❌ ${state.message}'),
                       backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 4),
                     ),
                   );
                 }
@@ -232,19 +248,14 @@ class _SignUpPageState extends State<SignUpPage> {
                           Row(
                             children: [
                               IconButton(
-                                onPressed: isLoading
-                                    ? null
-                                    : () => Navigator.pop(context),
-                                icon: const Icon(
-                                  Icons.arrow_back,
-                                  color: Colors.white,
-                                ),
+                                onPressed: isLoading ? null : () => Navigator.pop(context),
+                                icon: const Icon(Icons.arrow_back, color: Colors.white),
                               ),
                             ],
                           ),
                           const SizedBox(height: 16),
 
-                          // Logo/Icon
+                          // Logo
                           Container(
                             padding: const EdgeInsets.all(24),
                             decoration: BoxDecoration(
@@ -252,18 +263,13 @@ class _SignUpPageState extends State<SignUpPage> {
                               gradient: AppTheme.primaryGradient,
                               boxShadow: [
                                 BoxShadow(
-                                  color:
-                                  const Color(0xFFa855f7).withOpacity(0.5),
+                                  color: const Color(0xFFa855f7).withOpacity(0.5),
                                   blurRadius: 30,
                                   offset: const Offset(0, 10),
                                 ),
                               ],
                             ),
-                            child: const Icon(
-                              Icons.person_add,
-                              size: 64,
-                              color: Colors.white,
-                            ),
+                            child: const Icon(Icons.person_add, size: 64, color: Colors.white),
                           ),
                           const SizedBox(height: 24),
 
@@ -290,7 +296,7 @@ class _SignUpPageState extends State<SignUpPage> {
                           ),
                           const SizedBox(height: 32),
 
-                          // Photo de profil
+                          // Photo de profil (OPTIONNELLE)
                           GestureDetector(
                             onTap: isLoading ? null : _showImagePickerOptions,
                             child: Stack(
@@ -301,24 +307,21 @@ class _SignUpPageState extends State<SignUpPage> {
                                     gradient: AppTheme.primaryGradient,
                                     boxShadow: [
                                       BoxShadow(
-                                        color: const Color(0xFFa855f7)
-                                            .withOpacity(0.3),
+                                        color: const Color(0xFFa855f7).withOpacity(0.3),
                                         blurRadius: 20,
                                         offset: const Offset(0, 5),
                                       ),
                                     ],
                                   ),
                                   padding: const EdgeInsets.all(3),
-                                  child: ClipOval(
-                                    child: Container(
-                                      width: 120,
-                                      height: 120,
-                                      decoration: const BoxDecoration(
-                                        color: Color(0xFF2d1b4e),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: _buildAvatarImage(),
+                                  child: Container(
+                                    width: 120,
+                                    height: 120,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF2d1b4e),
+                                      shape: BoxShape.circle,
                                     ),
+                                    child: _buildAvatarImage(),
                                   ),
                                 ),
                                 Positioned(
@@ -348,7 +351,7 @@ class _SignUpPageState extends State<SignUpPage> {
                           Text(
                             (_selectedImage != null || _webImageBytes != null)
                                 ? 'Photo sélectionnée ✓'
-                                : 'Appuyez pour ajouter une photo',
+                                : 'Photo optionnelle - Appuyez pour ajouter',
                             style: TextStyle(
                               fontSize: 12,
                               color: (_selectedImage != null || _webImageBytes != null)
@@ -367,46 +370,23 @@ class _SignUpPageState extends State<SignUpPage> {
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.2),
-                              ),
+                              border: Border.all(color: Colors.white.withOpacity(0.2)),
                             ),
                             child: Column(
                               children: [
                                 // Nom
                                 TextFormField(
                                   controller: _nameController,
-                                  keyboardType: TextInputType.name,
+                                  enabled: !isLoading,
                                   style: const TextStyle(color: Colors.white),
                                   decoration: InputDecoration(
                                     labelText: 'Nom complet',
-                                    labelStyle: TextStyle(
-                                      color: Colors.white.withOpacity(0.8),
-                                    ),
-                                    prefixIcon: const Icon(
-                                      Icons.person,
-                                      color: Color(0xFFa855f7),
-                                    ),
+                                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.8)),
+                                    prefixIcon: const Icon(Icons.person, color: Color(0xFFa855f7)),
                                     filled: true,
                                     fillColor: Colors.white.withOpacity(0.05),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(16),
-                                      borderSide: BorderSide(
-                                        color: Colors.white.withOpacity(0.2),
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      borderSide: BorderSide(
-                                        color: Colors.white.withOpacity(0.2),
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFFa855f7),
-                                        width: 2,
-                                      ),
                                     ),
                                   ),
                                   validator: (value) {
@@ -424,37 +404,17 @@ class _SignUpPageState extends State<SignUpPage> {
                                 // Email
                                 TextFormField(
                                   controller: _emailController,
+                                  enabled: !isLoading,
                                   keyboardType: TextInputType.emailAddress,
                                   style: const TextStyle(color: Colors.white),
                                   decoration: InputDecoration(
                                     labelText: 'Email',
-                                    labelStyle: TextStyle(
-                                      color: Colors.white.withOpacity(0.8),
-                                    ),
-                                    prefixIcon: const Icon(
-                                      Icons.email,
-                                      color: Color(0xFFa855f7),
-                                    ),
+                                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.8)),
+                                    prefixIcon: const Icon(Icons.email, color: Color(0xFFa855f7)),
                                     filled: true,
                                     fillColor: Colors.white.withOpacity(0.05),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(16),
-                                      borderSide: BorderSide(
-                                        color: Colors.white.withOpacity(0.2),
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      borderSide: BorderSide(
-                                        color: Colors.white.withOpacity(0.2),
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFFa855f7),
-                                        width: 2,
-                                      ),
                                     ),
                                   ),
                                   validator: (value) {
@@ -472,50 +432,26 @@ class _SignUpPageState extends State<SignUpPage> {
                                 // Mot de passe
                                 TextFormField(
                                   controller: _passwordController,
+                                  enabled: !isLoading,
                                   obscureText: _obscurePassword,
                                   style: const TextStyle(color: Colors.white),
                                   decoration: InputDecoration(
                                     labelText: 'Mot de passe',
-                                    labelStyle: TextStyle(
-                                      color: Colors.white.withOpacity(0.8),
-                                    ),
-                                    prefixIcon: const Icon(
-                                      Icons.lock,
-                                      color: Color(0xFFa855f7),
-                                    ),
+                                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.8)),
+                                    prefixIcon: const Icon(Icons.lock, color: Color(0xFFa855f7)),
                                     suffixIcon: IconButton(
                                       icon: Icon(
-                                        _obscurePassword
-                                            ? Icons.visibility
-                                            : Icons.visibility_off,
+                                        _obscurePassword ? Icons.visibility : Icons.visibility_off,
                                         color: Colors.white.withOpacity(0.6),
                                       ),
                                       onPressed: () {
-                                        setState(() {
-                                          _obscurePassword = !_obscurePassword;
-                                        });
+                                        setState(() => _obscurePassword = !_obscurePassword);
                                       },
                                     ),
                                     filled: true,
                                     fillColor: Colors.white.withOpacity(0.05),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(16),
-                                      borderSide: BorderSide(
-                                        color: Colors.white.withOpacity(0.2),
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      borderSide: BorderSide(
-                                        color: Colors.white.withOpacity(0.2),
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFFa855f7),
-                                        width: 2,
-                                      ),
                                     ),
                                   ),
                                   validator: (value) {
@@ -523,67 +459,39 @@ class _SignUpPageState extends State<SignUpPage> {
                                       return 'Veuillez entrer votre mot de passe';
                                     }
                                     if (value.length < 6) {
-                                      return 'Le mot de passe doit contenir au moins 6 caractères';
+                                      return 'Minimum 6 caractères';
                                     }
                                     return null;
                                   },
                                 ),
                                 const SizedBox(height: 16),
 
-                                // Confirmation mot de passe
+                                // Confirmation
                                 TextFormField(
                                   controller: _confirmPasswordController,
+                                  enabled: !isLoading,
                                   obscureText: _obscureConfirmPassword,
                                   style: const TextStyle(color: Colors.white),
                                   decoration: InputDecoration(
-                                    labelText: 'Confirmer le mot de passe',
-                                    labelStyle: TextStyle(
-                                      color: Colors.white.withOpacity(0.8),
-                                    ),
-                                    prefixIcon: const Icon(
-                                      Icons.lock_outline,
-                                      color: Color(0xFFa855f7),
-                                    ),
+                                    labelText: 'Confirmer',
+                                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.8)),
+                                    prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFFa855f7)),
                                     suffixIcon: IconButton(
                                       icon: Icon(
-                                        _obscureConfirmPassword
-                                            ? Icons.visibility
-                                            : Icons.visibility_off,
+                                        _obscureConfirmPassword ? Icons.visibility : Icons.visibility_off,
                                         color: Colors.white.withOpacity(0.6),
                                       ),
                                       onPressed: () {
-                                        setState(() {
-                                          _obscureConfirmPassword =
-                                          !_obscureConfirmPassword;
-                                        });
+                                        setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
                                       },
                                     ),
                                     filled: true,
                                     fillColor: Colors.white.withOpacity(0.05),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(16),
-                                      borderSide: BorderSide(
-                                        color: Colors.white.withOpacity(0.2),
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      borderSide: BorderSide(
-                                        color: Colors.white.withOpacity(0.2),
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFFa855f7),
-                                        width: 2,
-                                      ),
                                     ),
                                   ),
                                   validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Veuillez confirmer votre mot de passe';
-                                    }
                                     if (value != _passwordController.text) {
                                       return 'Les mots de passe ne correspondent pas';
                                     }
@@ -600,9 +508,7 @@ class _SignUpPageState extends State<SignUpPage> {
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFFa855f7),
                                       foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 16,
-                                      ),
+                                      padding: const EdgeInsets.symmetric(vertical: 16),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(16),
                                       ),
@@ -614,17 +520,12 @@ class _SignUpPageState extends State<SignUpPage> {
                                       width: 20,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
-                                        valueColor:
-                                        AlwaysStoppedAnimation<Color>(
-                                            Colors.white),
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                       ),
                                     )
                                         : const Text(
                                       'S\'inscrire',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                                     ),
                                   ),
                                 ),
@@ -633,20 +534,16 @@ class _SignUpPageState extends State<SignUpPage> {
                           ),
                           const SizedBox(height: 24),
 
-                          // Lien vers connexion
+                          // Lien connexion
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                'Vous avez déjà un compte ? ',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.8),
-                                ),
+                                'Déjà un compte ? ',
+                                style: TextStyle(color: Colors.white.withOpacity(0.8)),
                               ),
                               TextButton(
-                                onPressed: isLoading
-                                    ? null
-                                    : () => Navigator.pop(context),
+                                onPressed: isLoading ? null : () => Navigator.pop(context),
                                 child: const Text(
                                   'Se connecter',
                                   style: TextStyle(
